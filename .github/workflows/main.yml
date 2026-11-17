@@ -1,22 +1,25 @@
 
-name: RayBan - Prueba Linux
+name: RayBan - Comprobar desarrollo iOS
 
 on:
   workflow_dispatch:
 
 jobs:
-  comprobar-entorno:
-    runs-on: ubuntu-latest
+  comprobar-ios:
+    runs-on: macos-15
 
     steps:
-      - name: Comprobar sistema
-        run: uname -a
+      - name: Comprobar macOS
+        run: sw_vers
 
-      - name: Comprobar Python
-        run: python3 --version
+      - name: Comprobar Xcode
+        run: xcodebuild -version
 
-      - name: Comprobar Git
-        run: git --version
+      - name: Comprobar Swift
+        run: swift --version
 
-      - name: Finalizar prueba
-        run: echo "Prueba completada correctamente"
+      - name: Comprobar SDK de iOS
+        run: xcodebuild -showsdks
+
+      - name: Finalizar
+        run: echo "Entorno de desarrollo iOS disponible"
