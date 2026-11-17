@@ -1,27 +1,24 @@
 
-name: RayBan - Comprobar entorno iOS
+name: RayBan - Comprobar GitHub Actions
 
 on:
   workflow_dispatch:
 
 jobs:
   comprobar-entorno:
-    runs-on: macos-15
+    runs-on: ubuntu-latest
 
     steps:
       - name: Mostrar sistema operativo
-        run: sw_vers
+        run: uname -a
 
-      - name: Mostrar version de Xcode
-        run: xcodebuild -version
+      - name: Comprobar Python
+        run: python3 --version
 
-      - name: Mostrar version de Swift
-        run: swift --version
+      - name: Comprobar Git
+        run: git --version
 
-      - name: Mostrar SDK de iPhone
-        run: xcodebuild -showsdks
-
-      - name: Comprobar herramientas
+      - name: Confirmar funcionamiento
         run: |
-          echo "Entorno macOS disponible"
-          echo "Prueba de herramientas completada"
+          echo "GitHub Actions funciona correctamente"
+          echo "Prueba de entorno completada"
