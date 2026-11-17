@@ -1,5 +1,5 @@
 
-name: RayBan - Comprobar GitHub Actions
+name: RayBan - Prueba Linux
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Mostrar sistema operativo
+      - name: Comprobar sistema
         run: uname -a
 
       - name: Comprobar Python
@@ -18,7 +18,5 @@ jobs:
       - name: Comprobar Git
         run: git --version
 
-      - name: Confirmar funcionamiento
-        run: |
-          echo "GitHub Actions funciona correctamente"
-          echo "Prueba de entorno completada"
+      - name: Finalizar prueba
+        run: echo "Prueba completada correctamente"
