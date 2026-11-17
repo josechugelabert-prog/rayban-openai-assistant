@@ -1,0 +1,27 @@
+
+name: RayBan - Comprobar entorno iOS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  comprobar-entorno:
+    runs-on: macos-15
+
+    steps:
+      - name: Mostrar sistema operativo
+        run: sw_vers
+
+      - name: Mostrar version de Xcode
+        run: xcodebuild -version
+
+      - name: Mostrar version de Swift
+        run: swift --version
+
+      - name: Mostrar SDK de iPhone
+        run: xcodebuild -showsdks
+
+      - name: Comprobar herramientas
+        run: |
+          echo "Entorno macOS disponible"
+          echo "Prueba de herramientas completada"
