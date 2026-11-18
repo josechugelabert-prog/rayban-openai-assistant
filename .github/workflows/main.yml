@@ -1,25 +1,25 @@
 
-name: RayBan - Comprobar desarrollo iOS
+name: RayBan - Comprobar SDK Meta
 
 on:
   workflow_dispatch:
 
 jobs:
-  comprobar-ios:
-    runs-on: macos-15-intel
+  comprobar-entorno:
+    runs-on: macos-26
 
     steps:
-      - name: Comprobar macOS
-        run: sw_vers
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
 
-      - name: Comprobar Xcode
-        run: xcodebuild -version
+      - name: Comprobar Xcode y Swift
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
 
-      - name: Comprobar Swift
-        run: swift --version
-
-      - name: Comprobar SDK de iOS
-        run: xcodebuild -showsdks
-
-      - name: Finalizar
-        run: echo "Entorno de desarrollo iOS disponible"
+      - name: Descargar SDK oficial de Meta
+        run: |
+          git clone --depth 1 https://github.com/facebook/meta-wearables-dat-ios.git meta-sdk
+          test -d meta-sdk/samples/CameraAccess
+          echo "SDK de Meta descargado correctamente"
