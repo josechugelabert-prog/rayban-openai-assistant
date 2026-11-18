@@ -1,25 +1,29 @@
 
-name: RayBan - Comprobar SDK Meta
+name: RayBan - Compilar CameraAccess
 
 on:
   workflow_dispatch:
 
 jobs:
-  comprobar-entorno:
+  compilar:
     runs-on: macos-26
 
     steps:
-      - name: Descargar repositorio
-        uses: actions/checkout@v4
-
-      - name: Comprobar Xcode y Swift
-        run: |
-          sw_vers
-          xcodebuild -version
-          swift --version
-
-      - name: Descargar SDK oficial de Meta
+      - name: Descargar SDK de Meta
         run: |
           git clone --depth 1 https://github.com/facebook/meta-wearables-dat-ios.git meta-sdk
-          test -d meta-sdk/samples/CameraAccess
-          echo "SDK de Meta descargado correctamente"
+
+      - name: Mostrar proyectos disponibles
+        run: |
+          xcodebuild -list \
+            -project meta-sdk/samples/CameraAccess/CameraAccess.xcodeproj
+
+      - name: Compilar para simulador iOS
+        run: |
+          xcodebuild build \
+            -project meta-sdk/samples/CameraAccess/CameraAccess.xcodeproj \
+            -scheme CameraAccess \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
