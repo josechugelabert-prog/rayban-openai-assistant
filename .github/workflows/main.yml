@@ -1,29 +1,99 @@
-
-name: RayBan - Compilar CameraAccess
+name: OpenVision | iOS build and tests
 
 on:
+  push:
+    branches: [test/openvision-ios]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: openvision-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+
+defaults:
+  run:
+    working-directory: openvision
+
 jobs:
-  compilar:
+  ios:
+    name: OpenVision (${{ matrix.target }})
     runs-on: macos-26
-
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [device, simulator]
     steps:
-      - name: Descargar SDK de Meta
+      - uses: actions/checkout@v4
+      - name: Prepare Xcode and configuration
         run: |
-          git clone --depth 1 https://github.com/facebook/meta-wearables-dat-ios.git meta-sdk
-
-      - name: Mostrar proyectos disponibles
+          xcodebuild -version
+          xcodebuild -downloadComponent MetalToolchain
+          cp Config.xcconfig.example Config.xcconfig
+          cp OpenVision/Config/Config.swift.example OpenVision/Config/Config.swift
+      - name: Build app and tests for device
+        if: matrix.target == 'device'
         run: |
-          xcodebuild -list \
-            -project meta-sdk/samples/CameraAccess/CameraAccess.xcodeproj
-
-      - name: Compilar para simulador iOS
+          xcodebuild build-for-testing -project OpenVision.xcodeproj -scheme OpenVision \
+            -configuration Debug -destination 'generic/platform=iOS' -derivedDataPath .build \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM=
+      - name: Package the unsigned device IPA
+        if: matrix.target == 'device'
         run: |
-          xcodebuild build \
-            -project meta-sdk/samples/CameraAccess/CameraAccess.xcodeproj \
-            -scheme CameraAccess \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO
+          app=.build/Build/Products/Debug-iphoneos/OpenVision.app
+          test -x "$app/OpenVision"
+          xcrun vtool -show-build "$app/OpenVision" | tee .build/device-build.txt
+          grep -Eq 'platform[[:space:]]+IOS([[:space:]]|$)' .build/device-build.txt
+          xcrun lipo -verify_arch arm64 "$app/OpenVision"
+          mkdir -p .build/ipa/Payload
+          ditto "$app" .build/ipa/Payload/OpenVision.app
+          mkdir -p .build/ipa/Payload/OpenVision.app/OpenSourceLicenses
+          for component in MLXUtilsLibrary MisakiSwift kokoro-ios; do
+            cp "Vendor/$component/LICENSE" ".build/ipa/Payload/OpenVision.app/OpenSourceLicenses/$component.txt"
+          done
+          cp LICENSE .build/ipa/Payload/OpenVision.app/OpenSourceLicenses/OpenVision.txt
+          cd .build/ipa
+          ditto -c -k --keepParent Payload OpenVision-unsigned.ipa
+          unzip -tq OpenVision-unsigned.ipa
+      - name: Upload unsigned device IPA
+        if: matrix.target == 'device'
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenVision-iOS-arm64-unsigned
+          path: openvision/.build/ipa/OpenVision-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 3
+      - name: Build and test on iPhone simulator
+        if: matrix.target == 'simulator'
+        run: |
+          simulator="$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          for runtime in sorted(devices, reverse=True):
+              for device in devices[runtime]:
+                  if device["name"].startswith("iPhone"):
+                      print(device["udid"])
+                      sys.exit(0)
+          sys.exit("No iPhone simulator available")
+          ')"
+          xcodebuild test -project OpenVision.xcodeproj -scheme OpenVision \
+            -configuration Debug -destination "platform=iOS Simulator,id=$simulator" \
+            -derivedDataPath .build -resultBundlePath OpenVision.xcresult \
+            -parallel-testing-enabled NO -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM=
+      - name: Upload build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenVision-build-logs-${{ matrix.target }}
+          path: |
+            openvision/.build/Logs/Build/*.xcactivitylog
+            openvision/OpenVision.xcresult
+          if-no-files-found: ignore
+          retention-days: 3
