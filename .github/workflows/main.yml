@@ -1,29 +1,76 @@
-
-name: RayBan - Compilar CameraAccess
+name: RayBan OpenAI Assistant
 
 on:
   workflow_dispatch:
+    inputs:
+      device_ipa:
+        description: Generar IPA arm64 sin firma para firmar después
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 jobs:
-  compilar:
-    runs-on: macos-26
-
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Descargar SDK de Meta
-        run: |
-          git clone --depth 1 https://github.com/facebook/meta-wearables-dat-ios.git meta-sdk
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test server/server.test.mjs
 
-      - name: Mostrar proyectos disponibles
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 35
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      PROJECT: .build/rayban-ios/CameraAccess.xcodeproj
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar CameraAccess y comprobar Xcode
         run: |
-          xcodebuild -list \
-            -project meta-sdk/samples/CameraAccess/CameraAccess.xcodeproj
-
-      - name: Compilar para simulador iOS
+          xcodebuild -version
+          python3 scripts/prepare-ios.py
+      - name: Compilar para el simulador
         run: |
-          xcodebuild build \
-            -project meta-sdk/samples/CameraAccess/CameraAccess.xcodeproj \
-            -scheme CameraAccess \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO
+          xcodebuild build -project "$PROJECT" -scheme CameraAccess \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath .build/simulator CODE_SIGNING_ALLOWED=NO
+      - name: Probar con MockDeviceKit
+        run: |
+          simulator="$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          for runtime in sorted(devices, reverse=True):
+              for device in devices[runtime]:
+                  if device["isAvailable"] and device["name"].startswith("iPhone"):
+                      print(device["udid"])
+                      sys.exit(0)
+          sys.exit("No hay simulador de iPhone disponible")
+          ')"
+          xcodebuild test -project "$PROJECT" -scheme CameraAccess \
+            -configuration Debug -destination "platform=iOS Simulator,id=$simulator" \
+            -derivedDataPath .build/simulator -parallel-testing-enabled NO \
+            -only-testing:CameraAccessTests CODE_SIGNING_ALLOWED=NO
+      - name: Empaquetar una IPA de dispositivo sin firma
+        if: inputs.device_ipa
+        run: |
+          xcodebuild build -project "$PROJECT" -scheme CameraAccess \
+            -configuration Debug -destination 'generic/platform=iOS' \
+            -derivedDataPath .build/device CODE_SIGNING_ALLOWED=NO
+          mkdir -p .build/ipa/Payload
+          ditto .build/device/Build/Products/Debug-iphoneos/CameraAccess.app \
+            .build/ipa/Payload/CameraAccess.app
+          cd .build/ipa
+          ditto -c -k --keepParent Payload RayBanOpenAIAssistant-unsigned.ipa
+      - name: Guardar la IPA como artefacto de la ejecución
+        if: inputs.device_ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: RayBanOpenAIAssistant-unsigned
+          path: .build/ipa/RayBanOpenAIAssistant-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 3
