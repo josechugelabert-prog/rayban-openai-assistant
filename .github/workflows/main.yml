@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: openvision-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
@@ -53,10 +53,14 @@ jobs:
         if: matrix.target == 'device'
         run: |
           app=.build/Build/Products/Debug-iphoneos/OpenVision.app
-          test -x "$app/OpenVision"
-          xcrun vtool -show-build "$app/OpenVision" | tee .build/device-build.txt
-          grep -Eq 'platform[[:space:]]+IOS([[:space:]]|$)' .build/device-build.txt
-          xcrun lipo -verify_arch arm64 "$app/OpenVision"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
+          platform="$(/usr/libexec/PlistBuddy -c 'Print :DTPlatformName' "$app/Info.plist")"
+          if [[ "$platform" != iphoneos || ! -f "$app/$executable" ]]; then
+            echo "::error::Expected an iPhoneOS app executable in $app (platform: $platform)."
+            exit 1
+          fi
+          xcrun lipo -info "$app/$executable"
+          xcrun lipo -verify_arch arm64 "$app/$executable"
           mkdir -p .build/ipa/Payload
           ditto "$app" .build/ipa/Payload/OpenVision.app
           mkdir -p .build/ipa/Payload/OpenVision.app/OpenSourceLicenses
