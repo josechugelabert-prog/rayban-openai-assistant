@@ -70,7 +70,7 @@
     <!-- Required Device Capabilities -->
     <key>UIRequiredDeviceCapabilities</key>
     <array>
-        <string>arm64</string>
+        <string>armv7</string>
         <string>microphone</string>
     </array>
 
@@ -89,14 +89,6 @@
     <key>UISupportedExternalAccessoryProtocols</key>
     <array>
         <string>com.meta.ar.wearable</string>
-    </array>
-
-    <!-- Local network access for Meta DAT's Wi-Fi camera transport. -->
-    <key>NSLocalNetworkUsageDescription</key>
-    <string>OpenVision uses the local network to receive camera images from your glasses.</string>
-    <key>NSBonjourServices</key>
-    <array>
-        <string>_bonjour._tcp</string>
     </array>
 
     <!-- Privacy - Usage Descriptions -->

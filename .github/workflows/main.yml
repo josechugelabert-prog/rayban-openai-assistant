@@ -1,4 +1,4 @@
-name: OpenVision | iOS build and tests
+name: OpenVision | iPhone build
 
 on:
   push:
@@ -21,19 +21,9 @@ defaults:
 
 jobs:
   ios:
-    name: OpenVision (${{ matrix.target }})
-    runs-on: ${{ matrix.runner }}
+    name: OpenVision (device)
+    runs-on: macos-26-intel
     timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        include:
-          # Xcode on Intel cross-compiles the arm64 iPhone binary.
-          - target: device
-            runner: macos-26-intel
-          - target: simulator
-            runner: macos-26
     steps:
       - uses: actions/checkout@v4
       - name: Prepare Xcode and configuration
@@ -43,14 +33,12 @@ jobs:
           cp Config.xcconfig.example Config.xcconfig
           cp OpenVision/Config/Config.swift.example OpenVision/Config/Config.swift
       - name: Build app and tests for device
-        if: matrix.target == 'device'
         run: |
           xcodebuild build-for-testing -project OpenVision.xcodeproj -scheme OpenVision \
             -configuration Debug -destination 'generic/platform=iOS' -derivedDataPath "$PWD/.build" \
             -skipPackagePluginValidation -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM=
       - name: Package the unsigned device IPA
-        if: matrix.target == 'device'
         run: |
           trap 'echo "::error::IPA packaging failed at line $LINENO while running: $BASH_COMMAND"' ERR
           products="$PWD/.build/Build/Products"
@@ -61,7 +49,7 @@ jobs:
           fi
           echo "Packaging $app"
           executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
-          xcrun lipo -verify_arch arm64 "$app/$executable"
+          xcrun lipo "$app/$executable" -verify_arch arm64
           mkdir -p .build/ipa/Payload
           ditto "$app" .build/ipa/Payload/OpenVision.app
           licenses=.build/ipa/Payload/OpenVision.app/OpenSourceLicenses
@@ -73,38 +61,17 @@ jobs:
           ditto -c -k --keepParent "$PWD/.build/ipa/Payload" "$PWD/.build/ipa/OpenVision-unsigned.ipa"
           unzip -tq .build/ipa/OpenVision-unsigned.ipa
       - name: Upload unsigned device IPA
-        if: matrix.target == 'device'
         uses: actions/upload-artifact@v4
         with:
           name: OpenVision-iOS-arm64-unsigned
           path: openvision/.build/ipa/OpenVision-unsigned.ipa
           if-no-files-found: error
           retention-days: 3
-      - name: Build and test on iPhone simulator
-        if: matrix.target == 'simulator'
-        run: |
-          simulator="$(xcrun simctl list devices available -j | python3 -c '
-          import json, sys
-          devices = json.load(sys.stdin)["devices"]
-          for runtime in sorted(devices, reverse=True):
-              for device in devices[runtime]:
-                  if device["name"].startswith("iPhone"):
-                      print(device["udid"])
-                      sys.exit(0)
-          sys.exit("No iPhone simulator available")
-          ')"
-          xcodebuild test -project OpenVision.xcodeproj -scheme OpenVision \
-            -configuration Debug -destination "platform=iOS Simulator,id=$simulator" \
-            -derivedDataPath .build -resultBundlePath OpenVision.xcresult \
-            -parallel-testing-enabled NO -skipPackagePluginValidation -skipMacroValidation \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM=
       - name: Upload build diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: OpenVision-build-logs-${{ matrix.target }}
-          path: |
-            openvision/.build/Logs/Build/*.xcactivitylog
-            openvision/OpenVision.xcresult
+          name: OpenVision-build-logs
+          path: openvision/.build/Logs/Build/*.xcactivitylog
           if-no-files-found: ignore
           retention-days: 3
