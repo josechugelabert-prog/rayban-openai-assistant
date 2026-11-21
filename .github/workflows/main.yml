@@ -22,13 +22,18 @@ defaults:
 jobs:
   ios:
     name: OpenVision (${{ matrix.target }})
-    runs-on: macos-26
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
       max-parallel: 1
       matrix:
-        target: [device, simulator]
+        include:
+          # Xcode on Intel cross-compiles the arm64 iPhone binary.
+          - target: device
+            runner: macos-26-intel
+          - target: simulator
+            runner: macos-26
     steps:
       - uses: actions/checkout@v4
       - name: Prepare Xcode and configuration
