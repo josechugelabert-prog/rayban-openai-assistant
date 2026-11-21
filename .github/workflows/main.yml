@@ -46,31 +46,32 @@ jobs:
         if: matrix.target == 'device'
         run: |
           xcodebuild build-for-testing -project OpenVision.xcodeproj -scheme OpenVision \
-            -configuration Debug -destination 'generic/platform=iOS' -derivedDataPath .build \
+            -configuration Debug -destination 'generic/platform=iOS' -derivedDataPath "$PWD/.build" \
             -skipPackagePluginValidation -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM=
       - name: Package the unsigned device IPA
         if: matrix.target == 'device'
         run: |
-          app=.build/Build/Products/Debug-iphoneos/OpenVision.app
-          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
-          platform="$(/usr/libexec/PlistBuddy -c 'Print :DTPlatformName' "$app/Info.plist")"
-          if [[ "$platform" != iphoneos || ! -f "$app/$executable" ]]; then
-            echo "::error::Expected an iPhoneOS app executable in $app (platform: $platform)."
+          trap 'echo "::error::IPA packaging failed at line $LINENO while running: $BASH_COMMAND"' ERR
+          products="$PWD/.build/Build/Products"
+          app="$(find "$products" -type d -name OpenVision.app -not -path '*.xctest/*' -print -quit)"
+          if [[ -z "$app" ]]; then
+            echo "::error::OpenVision.app was not found under $products"
             exit 1
           fi
-          xcrun lipo -info "$app/$executable"
+          echo "Packaging $app"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
           xcrun lipo -verify_arch arm64 "$app/$executable"
           mkdir -p .build/ipa/Payload
           ditto "$app" .build/ipa/Payload/OpenVision.app
-          mkdir -p .build/ipa/Payload/OpenVision.app/OpenSourceLicenses
+          licenses=.build/ipa/Payload/OpenVision.app/OpenSourceLicenses
+          mkdir -p "$licenses"
           for component in MLXUtilsLibrary MisakiSwift kokoro-ios; do
-            cp "Vendor/$component/LICENSE" ".build/ipa/Payload/OpenVision.app/OpenSourceLicenses/$component.txt"
+            cp "Vendor/$component/LICENSE" "$licenses/$component.txt"
           done
-          cp LICENSE .build/ipa/Payload/OpenVision.app/OpenSourceLicenses/OpenVision.txt
-          cd .build/ipa
-          ditto -c -k --keepParent Payload OpenVision-unsigned.ipa
-          unzip -tq OpenVision-unsigned.ipa
+          cp LICENSE "$licenses/OpenVision.txt"
+          ditto -c -k --keepParent "$PWD/.build/ipa/Payload" "$PWD/.build/ipa/OpenVision-unsigned.ipa"
+          unzip -tq .build/ipa/OpenVision-unsigned.ipa
       - name: Upload unsigned device IPA
         if: matrix.target == 'device'
         uses: actions/upload-artifact@v4
