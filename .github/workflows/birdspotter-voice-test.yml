@@ -1,0 +1,48 @@
+name: Build unsigned BirdSpotter for iPhone
+on:
+  workflow_dispatch:
+  push:
+    branches: [birdspotter-voice-test]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-26-intel
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: meta/meta-wearables-dat-ios
+          ref: 41d79001da0dde6ab3eaccc5e2e60ff850241b60
+          persist-credentials: false
+      - name: Compile for physical iPhone
+        shell: bash
+        run: |
+          xcodebuild -version
+          xcodebuild build \
+            -project samples/BirdSpotter/BirdSpotter.xcodeproj \
+            -scheme birdspotter \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM=
+      - name: Package unsigned app
+        shell: bash
+        run: |
+          shopt -s nullglob
+          apps=(build/Build/Products/Debug-iphoneos/*.app)
+          if [[ ${#apps[@]} -ne 1 ]]; then
+            echo "Expected one iPhone app in Debug-iphoneos" >&2
+            exit 1
+          fi
+          mkdir -p package/Payload
+          ditto "${apps[0]}" "package/Payload/$(basename "${apps[0]}")"
+          ditto -c -k --keepParent package/Payload package/BirdSpotter-unsigned.ipa
+          unzip -tq package/BirdSpotter-unsigned.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BirdSpotter-unsigned
+          path: package/BirdSpotter-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 1
+
